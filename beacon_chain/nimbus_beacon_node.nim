@@ -292,7 +292,7 @@ proc initFullNode(
       ExitPool.init(dag, attestationPool, onVoluntaryExitAdded))
     consensusManager = ConsensusManager.new(
       dag, attestationPool, quarantine, node.eth1Monitor,
-      node.dynamicFeeRecipientsStore, node.keymanagerHost,
+      node.dynamicFeeRecipientsStore, config.validatorsDir,
       config.defaultFeeRecipient)
     blockProcessor = BlockProcessor.new(
       config.dumpEnabled, config.dumpDirInvalid, config.dumpDirIncoming,
@@ -357,8 +357,6 @@ proc initFullNode(
   node.syncManager = syncManager
   node.backfiller = backfiller
   node.router = router
-
-  debug "Loading validators", validatorsDir = config.validatorsDir()
 
   node.addValidators()
 

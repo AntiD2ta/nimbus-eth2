@@ -19,7 +19,7 @@ import
 from ../spec/eth2_apis/dynamic_fee_recipients import
   DynamicFeeRecipientsStore, getDynamicFeeRecipient
 from ../validators/keystore_management import
-  KeymanagerHost, getSuggestedFeeRecipient
+  getSuggestedFeeRecipient
 
 type
   ForkChoiceUpdatedInformation* = object
@@ -50,7 +50,7 @@ type
     # Allow determination of preferred fee recipient during proposals
     # ----------------------------------------------------------------
     dynamicFeeRecipientsStore: ref DynamicFeeRecipientsStore
-    keymanagerHost: ref KeymanagerHost
+    validatorsDir: string
     defaultFeeRecipient: Eth1Address
 
     # Tracking last proposal forkchoiceUpdated payload information
@@ -67,7 +67,7 @@ func new*(T: type ConsensusManager,
           quarantine: ref Quarantine,
           eth1Monitor: Eth1Monitor,
           dynamicFeeRecipientsStore: ref DynamicFeeRecipientsStore,
-          keymanagerHost: ref KeymanagerHost,
+          validatorsDir: string,
           defaultFeeRecipient: Eth1Address
          ): ref ConsensusManager =
   (ref ConsensusManager)(
@@ -76,7 +76,7 @@ func new*(T: type ConsensusManager,
     quarantine: quarantine,
     eth1Monitor: eth1Monitor,
     dynamicFeeRecipientsStore: dynamicFeeRecipientsStore,
-    keymanagerHost: keymanagerHost,
+    validatorsDir: validatorsDir,
     forkchoiceUpdatedInfo: Opt.none ForkchoiceUpdatedInformation,
     defaultFeeRecipient: defaultFeeRecipient
   )
@@ -268,13 +268,13 @@ proc checkNextProposer(dag: ChainDAGRef, slot: Slot):
   Opt.some((proposer.get, dag.validatorKey(proposer.get).get().toPubKey))
 
 proc getFeeRecipient*(
-    self: ref ConsensusManager, pubkey: ValidatorPubKey, validatorIdx: ValidatorIndex,
+    self: ConsensusManager, pubkey: ValidatorPubKey, validatorIdx: ValidatorIndex,
     epoch: Epoch): Eth1Address =
-  self.dynamicFeeRecipientsStore[].getDynamicFeeRecipient(validatorIdx, epoch).valueOr:
-    if self.keymanagerHost != nil:
-      self.keymanagerHost[].getSuggestedFeeRecipient(pubkey).valueOr:
-        self.defaultFeeRecipient
-    else:
+  self.dynamicFeeRecipientsStore[].getDynamicFeeRecipient(
+      validatorIdx, epoch).valueOr:
+    self.validatorsDir.getSuggestedFeeRecipient(
+        pubkey, self.defaultFeeRecipient).valueOr:
+      # Ignore errors and use default - errors are logged in gsfr
       self.defaultFeeRecipient
 
 from ../spec/datatypes/bellatrix import PayloadID
@@ -293,7 +293,7 @@ proc runProposalForkchoiceUpdated*(self: ref ConsensusManager) {.async.} =
       timestamp = compute_timestamp_at_slot(state.data, nextSlot)
       randomData =
         get_randao_mix(state.data, get_current_epoch(state.data)).data
-      feeRecipient = self.getFeeRecipient(
+      feeRecipient = self[].getFeeRecipient(
         nextProposer, validatorIndex, nextSlot.epoch)
       beaconHead = self.attestationPool[].getBeaconHead(self.dag.head)
       headBlockRoot = self.dag.loadExecutionBlockRoot(beaconHead.blck)
